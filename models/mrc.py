@@ -10,20 +10,22 @@ from torch.nn import CrossEntropyLoss, MSELoss
 
 from torch.autograd import Variable
 from transformers.file_utils import add_start_docstrings
-from transformers.modeling_bert import (BERT_INPUTS_DOCSTRING,
-                                        BERT_START_DOCSTRING, BertModel,
-                                        BertPreTrainedModel)
+# from transformers.modeling_bert import (BERT_INPUTS_DOCSTRING,
+#                                         BERT_START_DOCSTRING, BertModel,
+#                                         BertPreTrainedModel)
 
 # os.environ["CUDA_VISIBLE_DEVICES"] = '2,3'
 
-@add_start_docstrings("""Bert Model with a span classification head on top for extractive question-answering tasks like Duqa (a linear layers on top of
-    the hidden-states output to compute `span start logits` and `span end logits`). """,
-    BERT_START_DOCSTRING, BERT_INPUTS_DOCSTRING)
-class BertForBaiduQA_Answer_Selection(BertPreTrainedModel):
+# @add_start_docstrings("""Bert Model with a span classification head on top for extractive question-answering tasks like Duqa (a linear layers on top of
+#     the hidden-states output to compute `span start logits` and `span end logits`). """,
+#     BERT_START_DOCSTRING, BERT_INPUTS_DOCSTRING)
+class BertForBaiduQA_Answer_Selection(nn.model):
     """ TBD """
     def __init__(self, config):
         super(BertForBaiduQA_Answer_Selection, self).__init__(config)
-        self.bert = BertModel(config)
+        # self.bert = BertModel(config)
+        self.word_embedding = nn.embedding(config.word_vocab_size,config.word_hidden_size)
+        self.char_embedding = nn.embedding(config.char_vocab_size,config.char_hidden_size)
         self.lstmlayers = 1
         self.config = config
         # -----zhq
@@ -46,8 +48,6 @@ class BertForBaiduQA_Answer_Selection(BertPreTrainedModel):
             nn.Sigmoid()
         )
         self.w3_a = nn.Linear(config.hidden_size * 3, 1)
-        # self.w2_c = nn.Linear(config.hidden_size * 2,config.hidden_size)
-        # self.w1_c = nn.Linear(config.hidden_size, 1)
         # =======zhq
         self.qa_outputs = nn.Linear(config.hidden_size, 2)
         self.init_weights()

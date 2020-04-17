@@ -10,8 +10,9 @@ import os
 import random
 import sys
 
-import numpy as np
+
 import torch
+import numpy as np
 from tensorboardX import SummaryWriter
 from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler,
                               TensorDataset)
@@ -20,7 +21,7 @@ from tqdm import tqdm, trange
 from transformers import (WEIGHTS_NAME, AdamW, BertConfig, BertTokenizer,get_linear_schedule_with_warmup)
 
 from models import BertForBaiduQA_Answer_Selection
-from .utils_duqa import (RawResult, convert_examples_to_features, #.utils_duqa
+from .utils_duqa import (RawResult, convert_examples_to_features,my_tokenizer, #.utils_duqa
                          convert_output, read_baidu_examples,
                          read_baidu_examples_pred, write_predictions)
 os.environ["CUDA_VISIBLE_DEVICES"] = '3'
@@ -274,7 +275,7 @@ def predict(args, model, tokenizer, raw_data):
     return all_predictions, all_nbest_json
 
 
-def load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=False):
+def load_and_cache_examples(args, word_tokenizer,char_tokenizer, evaluate=False, output_examples=False):
     if args.local_rank not in [-1, 0] and not evaluate:
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
@@ -291,7 +292,8 @@ def load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=Fal
         logger.info("Creating features from dataset file at %s", input_file)
         examples = read_baidu_examples(input_file=input_file, is_training=not evaluate)
         features = convert_examples_to_features(examples=examples,
-                                                tokenizer=tokenizer,
+                                                word_tokenizer = word_tokenizer,
+                                                char_tokenizer = char_tokenizer,
                                                 max_seq_length=args.max_seq_length,
                                                 doc_stride=args.doc_stride,
                                                 max_query_length=args.max_query_length,
@@ -342,6 +344,11 @@ def main():
                         help="Path to pre-trained model or shortcut name selected in the list: ")
     parser.add_argument("--output_dir", default=None, type=str, required=True,
                         help="The output directory where the model checkpoints and predictions will be written.")
+    parser.add_argument("--word_vocab_dir", default=None, type=str, required=True,
+                        help="The word_vocab where the word to id rely.")
+    parser.add_argument("--char_vocab_dir", default=None, type=str, required=True,
+                        help="The char_vocab where the char to id rely")
+
 
     ## Other parameters
     parser.add_argument("--config_name", default="", type=str,
@@ -420,7 +427,7 @@ def main():
                              "See details at https://nvidia.github.io/apex/amp.html")
     args = parser.parse_args()
 
-    if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and args.do_train and not args.overwrite_output_dir:
+    if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and args.do_train and not args.overwrite_output_dir and os.path.exists(args.word_vocab_dir) and os.path.exists(args.char_vocab_dir) :
         raise ValueError("Output directory ({}) already exists and is not empty. Use --overwrite_output_dir to overcome.".format(args.output_dir))
     # Setup CUDA, GPU & distributed training
     if args.local_rank == -1 or args.no_cuda:
@@ -451,8 +458,10 @@ def main():
     args.model_type = args.model_type.lower()
     config_class, model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
     config = config_class.from_pretrained(args.config_name if args.config_name else args.model_name_or_path)
-    tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name if args.tokenizer_name else args.model_name_or_path, do_lower_case=args.do_lower_case)
-    from_tf=bool('.ckpt' in args.model_name_or_path)
+    word_tokenizer = my_tokenizer(args.word_vocab_dir)
+    char_tokenizer = my_tokenizer(args.char_vovab_dir)
+    # tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name if args.tokenizer_name else args.model_name_or_path, do_lower_case=args.do_lower_case)
+    from_tf = bool('.ckpt' in args.model_name_or_path)
     model = model_class.from_pretrained(args.model_name_or_path, from_tf=bool('.ckpt' in args.model_name_or_path), config=config)
 
     if args.local_rank == 0:
@@ -463,7 +472,7 @@ def main():
 
     # Training
     if args.do_train:
-        train_dataset = load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=False)
+        train_dataset = load_and_cache_examples(args, word_tokenizer,char_tokenizer, evaluate=False, output_examples=False)
         global_step, tr_loss = train(args, train_dataset, model, tokenizer)
         logger.info(" global_step = %s, average loss = %s", global_step, tr_loss)
 

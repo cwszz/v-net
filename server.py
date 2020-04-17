@@ -145,127 +145,124 @@ class Mrc(object):
         return examples
 
 
-class Rerank(object):
-    """
-    ADD KEY:
-    rerank_logits: float
-    """
+# class Rerank(object):
+#     """
+#     ADD KEY:
+#     rerank_logits: float
+# #     """
 
-    def __init__(self, config: dict):
-        """
-        Loading args, model, tokenizer
-        """
-        logger.info("***** Rerank model initing *****")
-        args = Args(config['rerank'])
+#     def __init__(self, config: dict):
+#         """
+#         Loading args, model, tokenizer
+#         """
+#         logger.info("***** Rerank model initing *****")
+#         args = Args(config['rerank'])
 
-        # Setup CUDA, GPU & distributed training
-        if args.local_rank == -1 or args.no_cuda:
-            device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
-            args.n_gpu = torch.cuda.device_count()
-        else:  # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
-            torch.cuda.set_device(args.local_rank)
-            device = torch.device("cuda", args.local_rank)
-            torch.distributed.init_process_group(backend='nccl')
-            args.n_gpu = 1
-        args.device = device
+#         # Setup CUDA, GPU & distributed training
+#         if args.local_rank == -1 or args.no_cuda:
+#             device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
+#             args.n_gpu = torch.cuda.device_count()
+#         else:  # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
+#             torch.cuda.set_device(args.local_rank)
+#             device = torch.device("cuda", args.local_rank)
+#             torch.distributed.init_process_group(backend='nccl')
+#             args.n_gpu = 1
+#         args.device = device
 
-        # Set seed
-        set_seed(args)
+#         # Set seed
+#         set_seed(args)
 
-        # Load pretrained model and tokenizer
-        if args.local_rank not in [-1, 0]:
-            torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
+#         # Load pretrained model and tokenizer
+#         if args.local_rank not in [-1, 0]:
+#             torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
 
-        # model_name_or_path: the path of pre-trained_model or checkpoint
-        args.model_type = args.model_type.lower()
-        config_class, model_class, tokenizer_class = rerank_MODEL_CLASSES[args.model_type]
-        self.config = config_class.from_pretrained(args.model_name_or_path)
-        self.tokenizer = tokenizer_class.from_pretrained(args.model_name_or_path, do_lower_case=args.do_lower_case)
-        self.model = model_class.from_pretrained(args.model_name_or_path,
-                                                 from_tf=bool('.ckpt' in args.model_name_or_path), config=self.config)
+#         # model_name_or_path: the path of pre-trained_model or checkpoint
+#         args.model_type = args.model_type.lower()
+#         config_class, model_class, tokenizer_class = rerank_MODEL_CLASSES[args.model_type]
+#         self.config = config_class.from_pretrained(args.model_name_or_path)
+#         self.tokenizer = tokenizer_class.from_pretrained(args.model_name_or_path, do_lower_case=args.do_lower_case)
+#         self.model = model_class.from_pretrained(args.model_name_or_path,
+#                                                  from_tf=bool('.ckpt' in args.model_name_or_path), config=self.config)
 
-        if args.local_rank == 0:
-            torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
+#         if args.local_rank == 0:
+#             torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
 
-        self.model.to(args.device)
-        self.args = args
+#         self.model.to(args.device)
+#         self.args = args
 
-        logger.info("Training/evaluation parameters %s", args)
+#         logger.info("Training/evaluation parameters %s", args)
 
-    def predict(self, examples):
-        all_rerank_logits = rerank_predict(self.args, self.model, self.tokenizer, examples)
-       # assert len(all_rerank_logits) == len(examples)
-        for example in examples:
-            qid = example['question_id']
-            example['rerank_logits'] = all_rerank_logits[qid][1]
-        return examples
+#     def predict(self, examples):
+#         all_rerank_logits = rerank_predict(self.args, self.model, self.tokenizer, examples)
+#        # assert len(all_rerank_logits) == len(examples)
+#         for example in examples:
+#             qid = example['question_id']
+#             example['rerank_logits'] = all_rerank_logits[qid][1]
+#         return examples
 
 
-class Choose(object):
-    """
-    ADD key:
-    rank_index
-    final_prob
-    pp_pm_pr: list, for debug
-    """
+# class Choose(object):
+#     """
+#     ADD key:
+#     rank_index
+#     final_prob
+#     pp_pm_pr: list, for debug
+#     """
 
-    def __init__(self):
-        self.pre_prob = [0.503, 0.3314, 0.1414, 0.0831, 0.0411]
+#     def __init__(self):
+#         self.pre_prob = [0.503, 0.3314, 0.1414, 0.0831, 0.0411]
 
-    def clean_answer(self, text):
-        dr = re.compile(r'<[^>]+>', re.S)
-        dd = dr.sub('', text)
-        newtext = dd.replace('\n', '').lstrip('。').lstrip('，')
-        return newtext
+#     def clean_answer(self, text):
+#         dr = re.compile(r'<[^>]+>', re.S)
+#         dd = dr.sub('', text)
+#         newtext = dd.replace('\n', '').lstrip('。').lstrip('，')
+#         return newtext
 
-    def _compute_softmax(self, scores):
-        """Compute softmax probability over raw logits."""
-        if not scores:
-            return []
+#     def _compute_softmax(self, scores):
+#         """Compute softmax probability over raw logits."""
+#         if not scores:
+#             return []
 
-        max_score = None
-        for score in scores:
-            if max_score is None or score > max_score:
-                max_score = score
+#         max_score = None
+#         for score in scores:
+#             if max_score is None or score > max_score:
+#                 max_score = score
 
-        exp_scores = []
-        total_sum = 0.0
-        for score in scores:
-            x = math.exp(score - max_score)
-            exp_scores.append(x)
-            total_sum += x
+#         exp_scores = []
+#         total_sum = 0.0
+#         for score in scores:
+#             x = math.exp(score - max_score)
+#             exp_scores.append(x)
+#             total_sum += x
 
-        probs = []
-        for score in exp_scores:
-            probs.append(score / total_sum)
-        return probs
+#         probs = []
+#         for score in exp_scores:
+#             probs.append(score / total_sum)
+#         return probs
 
-    def process(self, examples):
-        mrc_prob = []
-        rerank_prob = []
-        for example in examples:
-            mrc_prob.append(example['mrc_logits'])
-            rerank_prob.append(example['rerank_logits'])
-        mrc_prob = self._compute_softmax(mrc_prob)
-        rerank_prob = self._compute_softmax(rerank_prob)
-        for example, pp, pm, pr in zip(examples, self.pre_prob, mrc_prob, rerank_prob):
-            example['final_prob'] = pp * pm * pr
-            example['pp_pm_pr'] = [pp, pm, pr]
-            example['answer'] = self.clean_answer(example['answer'])
-        examples = sorted(examples, key=lambda x: x['final_prob'], reverse=True)
-        return examples
+#     def process(self, examples):
+#         mrc_prob = []
+#         rerank_prob = []
+#         for example in examples:
+#             mrc_prob.append(example['mrc_logits'])
+#             rerank_prob.append(example['rerank_logits'])
+#         mrc_prob = self._compute_softmax(mrc_prob)
+#         rerank_prob = self._compute_softmax(rerank_prob)
+#         for example, pp, pm, pr in zip(examples, self.pre_prob, mrc_prob, rerank_prob):
+#             example['final_prob'] = pp * pm * pr
+#             example['pp_pm_pr'] = [pp, pm, pr]
+#             example['answer'] = self.clean_answer(example['answer'])
+#         examples = sorted(examples, key=lambda x: x['final_prob'], reverse=True)
+#         return examples
 
 
 class Demo(object):
     def __init__(self, config_path):
         self.server_config = json.loads(open(config_path).read())
         self.mrc_processor = Mrc(self.server_config)
-        self.rerank_processor = Rerank(self.server_config)
-        self.choose_processor = Choose()
-        # if self.server_config["creeper"]["creeper_type"] == 'v1':
-        #     self.creeper = creeper_v1
-        # else:
-        #     self.creeper = creeper_v2
+        # self.rerank_processor = Rerank(self.server_config)
+        # self.choose_processor = Choose()
+        
         self.creeper = crawl
         self.keys = [
             "answer"
@@ -305,55 +302,55 @@ class Demo(object):
         #print("part1 Finish")
         examples = self.mrc_processor.predict(examples)
         #print("part2 Finish")
-        examples = self.rerank_processor.predict(examples)
-        #print("part3 Finish")
-        examples = self.choose_processor.process(examples)
-        if( examples[0]['doc_tokens']== examples[0]['temp_tokens']):
-            examples = self.filter(examples, self.indexs)
-            return examples[0]
-        examples[0]['doc_tokens']= examples[0]['temp_tokens']
-        examples.append(self.mrc_processor.predict([examples[0]])[0])
-        examples = self.rerank_processor.predict(examples)
-        examples = self.choose_processor.process(examples)
-        examples = self.filter(examples, self.indexs)
+        # examples = self.rerank_processor.predict(examples)
+        # #print("part3 Finish")
+        # examples = self.choose_processor.process(examples)
+        # if( examples[0]['doc_tokens']== examples[0]['temp_tokens']):
+        #     examples = self.filter(examples, self.indexs)
+        #     return examples[0]
+        # examples[0]['doc_tokens']= examples[0]['temp_tokens']
+        # examples.append(self.mrc_processor.predict([examples[0]])[0])
+        # examples = self.rerank_processor.predict(examples)
+        # examples = self.choose_processor.process(examples)
+        # examples = self.filter(examples, self.indexs)
         #print("part5 Finish")
         return examples[0]
 
-    def predict_v2(self, querys: list, doc: str):
-        examples = []
-        doc_tokens = list(jieba.cut(doc))
-        for index, query in enumerate(querys):
-            example = {
-                'question_id': index,
-                'question': query,
-                'doc_tokens': doc_tokens
-            }
-            examples.append(example)
-        examples = self.mrc_processor.predict(examples)
-        for example in examples:
-            example['answer'] = self.choose_processor.clean_answer(example['answer'])
-        examples = self.filter(examples, self.keys)
-        return examples
+    # def predict_v2(self, querys: list, doc: str):
+    #     examples = []
+    #     doc_tokens = list(jieba.cut(doc))
+    #     for index, query in enumerate(querys):
+    #         example = {
+    #             'question_id': index,
+    #             'question': query,
+    #             'doc_tokens': doc_tokens
+    #         }
+    #         examples.append(example)
+    #     examples = self.mrc_processor.predict(examples)
+    #     for example in examples:
+    #         example['answer'] = self.choose_processor.clean_answer(example['answer'])
+    #     examples = self.filter(examples, self.keys)
+    #     return examples
 
-    def predict_v3(self, query: str, docs: list):
-        examples = []
-        for index, doc in enumerate(docs):
-            doc_tokens = list(jieba.cut(doc))
-            example = {
-                'question_id': index,
-                'question': query,
-                'doc_tokens': doc_tokens
-            }
-            examples.append(example)
-        examples = self.mrc_processor.predict(examples)
-        for example in examples:
-            example['answer'] = self.choose_processor.clean_answer(example['answer'])
-            example['final_prob'] = example['mrc_prob']
-            example['final_prob_v1'] = example['mrc_prob_v1']
+    # def predict_v3(self, query: str, docs: list):
+    #     examples = []
+    #     for index, doc in enumerate(docs):
+    #         doc_tokens = list(jieba.cut(doc))
+    #         example = {
+    #             'question_id': index,
+    #             'question': query,
+    #             'doc_tokens': doc_tokens
+    #         }
+    #         examples.append(example)
+    #     examples = self.mrc_processor.predict(examples)
+    #     for example in examples:
+    #         example['answer'] = self.choose_processor.clean_answer(example['answer'])
+    #         example['final_prob'] = example['mrc_prob']
+    #         example['final_prob_v1'] = example['mrc_prob_v1']
 
-        examples = sorted(examples, key=lambda x: x['final_prob'], reverse=True)
-        examples = self.filter(examples, self.keys)
-        return examples
+    #     examples = sorted(examples, key=lambda x: x['final_prob'], reverse=True)
+    #     examples = self.filter(examples, self.keys)
+    #     return examples
 
 if __name__ == "__main__":
     app = Flask(__name__)
